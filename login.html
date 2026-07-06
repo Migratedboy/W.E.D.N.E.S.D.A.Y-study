@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+<meta name="referrer" content="no-referrer">
+<title>Login - W.E.D.N.E.S.D.A.Y Study</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d0d12; color: #eee; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .card { width: 100%; max-width: 400px; background: #16161e; border: 1px solid #2a2a38; border-radius: 16px; padding: 32px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  h1 { font-size: 20px; text-align: center; letter-spacing: 2px; margin-bottom: 4px; color: #b18cff; }
+  .sub { text-align: center; color: #888; font-size: 13px; margin-bottom: 24px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tabs button { flex: 1; padding: 10px; background: #1e1e2a; color: #aaa; border: 1px solid #2a2a38; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .tabs button.active { background: #6c3ce9; color: #fff; border-color: #6c3ce9; }
+  label { display: block; font-size: 12px; color: #999; margin: 14px 0 6px; }
+  input { width: 100%; padding: 12px; background: #0d0d12; border: 1px solid #2a2a38; border-radius: 8px; color: #fff; font-size: 15px; }
+  input:focus { outline: none; border-color: #6c3ce9; }
+  .code-input { text-align: center; font-size: 28px; letter-spacing: 12px; margin-top: 8px; }
+  .btn { width: 100%; margin-top: 20px; padding: 13px; background: #6c3ce9; border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: #7d51f0; }
+  .btn:disabled { opacity: .5; cursor: wait; }
+  .link { display: block; width: 100%; margin-top: 14px; text-align: center; background: none; border: none; color: #b18cff; font-size: 13px; cursor: pointer; }
+  .msg { margin-top: 14px; font-size: 13px; text-align: center; min-height: 18px; }
+  .msg.error { color: #ff6b6b; }
+  .msg.ok { color: #5ad18f; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>W.E.D.N.E.S.D.A.Y</h1>
+  <p class="sub">Sign in to continue studying</p>
+
+  <div id="step-credentials">
+    <div class="tabs">
+      <button id="tab-login" class="active" onclick="setMode('login')">Log in</button>
+      <button id="tab-signup" onclick="setMode('signup')">Create account</button>
+    </div>
+    <label for="email" id="email-label">Email</label>
+    <input id="email" type="text" placeholder="you@example.com" autocomplete="email" />
+    <label for="password">Password</label>
+    <input id="password" type="password" placeholder="Minimum 8 characters" autocomplete="current-password" />
+    <button id="submit-btn" class="btn" onclick="submitCredentials()">Log in</button>
+  </div>
+
+  <div id="step-code" class="hidden">
+    <p class="sub" id="code-hint">Enter the 6-digit code we emailed you.</p>
+    <input id="code" class="code-input" maxlength="6" inputmode="numeric" placeholder="000000" />
+    <button class="btn" onclick="submitCode()">Verify</button>
+    <button class="link" onclick="resendCode()">Resend code</button>
+    <button class="link" onclick="backToStart()">Back</button>
+  </div>
+
+  <div id="step-username" class="hidden">
+    <p class="sub">Almost done! Choose a username. This is how you'll appear on the leaderboard, and you can use it to log in from now on.</p>
+    <label for="username">Username</label>
+    <input id="username" type="text" placeholder="e.g. study_ninja" autocomplete="username" maxlength="20" />
+    <button class="btn" onclick="submitUsername()">Continue</button>
+  </div>
+
+  <p id="msg" class="msg"></p>
+</div>
+<script>
+let mode = 'login';
+let pendingEmail = '';
+
+const originalFetch = window.fetch.bind(window);
+window.fetch = function(input, init = {}) {
+  if (typeof input === 'string' && input.startsWith('/api/')) {
+    init = { credentials: 'same-origin', ...init };
+  }
+  return originalFetch(input, init);
+};
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-login').classList.toggle('active', m === 'login');
+  document.getElementById('tab-signup').classList.toggle('active', m === 'signup');
+  document.getElementById('submit-btn').textContent = m === 'login' ? 'Log in' : 'Create account';
+  const emailInput = document.getElementById('email');
+  if (m === 'login') {
+    document.getElementById('email-label').textContent = 'Email or username';
+    emailInput.placeholder = 'you@example.com or username';
+    emailInput.autocomplete = 'username';
+  } else {
+    document.getElementById('email-label').textContent = 'Email';
+    emailInput.placeholder = 'you@example.com';
+    emailInput.autocomplete = 'email';
+  }
+  showMsg('');
+}
+
+function showMsg(text, ok) {
+  const el = document.getElementById('msg');
+  el.textContent = text || '';
+  el.className = 'msg ' + (text ? (ok ? 'ok' : 'error') : '');
+}
+
+async function api(path, data) {
+  const r = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  const j = await r.json().catch(function () { return {}; });
+  if (!r.ok) throw new Error(j.error || 'Request failed');
+  return j;
+}
+
+async function submitCredentials() {
+  const identifier = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  if (!identifier || !password) return showMsg((mode === 'login' ? 'Email/username' : 'Email') + ' and password are required.');
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  try {
+    const payload = mode === 'login' ? { identifier: identifier, password: password } : { email: identifier, password: password };
+    const j = await api('/api/auth/' + (mode === 'login' ? 'login' : 'signup'), payload);
+    pendingEmail = j.email || identifier;
+    document.getElementById('step-credentials').classList.add('hidden');
+    document.getElementById('step-code').classList.remove('hidden');
+    document.getElementById('code-hint').textContent = 'Enter the 6-digit code sent to ' + pendingEmail;
+    showMsg(j.message || 'Code sent.', true);
+    document.getElementById('code').focus();
+  } catch (e) { showMsg(e.message); }
+  btn.disabled = false;
+}
+
+async function submitCode() {
+  const code = document.getElementById('code').value.trim();
+  if (code.length !== 6) return showMsg('Enter the 6-digit code.');
+  try {
+    const j = await api('/api/auth/verify', { email: pendingEmail, code: code });
+    if (j.needsUsername) {
+      document.getElementById('step-code').classList.add('hidden');
+      document.getElementById('step-username').classList.remove('hidden');
+      showMsg('');
+      document.getElementById('username').focus();
+      return;
+    }
+    showMsg('Success! Loading your study space...', true);
+    location.href = '/';
+  } catch (e) { showMsg(e.message); }
+}
+
+async function submitUsername() {
+  const username = document.getElementById('username').value.trim();
+  if (username.length < 3) return showMsg('Username must be at least 3 characters.');
+  try {
+    await api('/api/auth/set-username', { email: pendingEmail, username: username });
+    showMsg('Success! Loading your study space...', true);
+    location.href = '/';
+  } catch (e) { showMsg(e.message); }
+}
+
+async function resendCode() {
+  try {
+    const j = await api('/api/auth/resend', { email: pendingEmail });
+    showMsg(j.message || 'New code sent.', true);
+  } catch (e) { showMsg(e.message); }
+}
+
+function backToStart() {
+  document.getElementById('step-code').classList.add('hidden');
+  document.getElementById('step-credentials').classList.remove('hidden');
+  showMsg('');
+}
+
+document.getElementById('password').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitCredentials(); });
+document.getElementById('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitCode(); });
+document.getElementById('username').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitUsername(); });
+</script>
+</body>
+</html>
