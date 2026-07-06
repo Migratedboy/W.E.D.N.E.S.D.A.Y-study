@@ -4671,7 +4671,7 @@ document.addEventListener('keydown', e => {
     { id: 'essay-writer',  icon: '📝', title: 'Essay Writer', desc: 'Polished long-form' },
     { id: 'coding',        icon: '💻', title: 'Coding Assistant', desc: 'Pair programming' },
     { id: 'problem-solver',icon: '🧮', title: 'Problem Solver', desc: 'Step-by-step logic' },
-    { id: 'image-gen',     icon: '🖼', title: 'Image Generator', desc: 'Stunning visuals' },
+    { id: 'image-gen',     icon: '🖼', title: 'Diagram Generator', desc: 'Text-based diagrams' },
     { id: 'voice-tutor',   icon: '🎙', title: 'Voice Tutor', desc: 'Speak to learn' },
     { id: 'analytics',     icon: '📊', title: 'Study Analytics', desc: 'Track mastery' },
     { id: 'flashcards',    icon: '🧩', title: 'Flashcards', desc: 'Spaced repetition' }
@@ -4691,8 +4691,49 @@ document.addEventListener('keydown', e => {
         const id = card.dataset.tool;
         state.selectedTool = state.selectedTool === id ? null : id;
         renderTools();
+        runTool(id);
       });
     });
+  }
+
+  function exitThen(fn) {
+    closePremiumWorkspace();
+    setTimeout(fn, 400);
+  }
+
+  function runTool(id) {
+    switch (id) {
+      case 'deep-research':
+        exitThen(() => sendMessage('Research this topic in detail with headings, examples and exam tips.'));
+        break;
+      case 'gpt-55':
+        exitThen(() => chatInput.focus());
+        break;
+      case 'smart-notes':
+        exitThen(() => { loadNotes(currentSubject); notesEl.focus(); });
+        break;
+      case 'essay-writer':
+        exitThen(() => { chatInput.value = 'Write a structured essay about: '; chatInput.focus(); });
+        break;
+      case 'coding':
+        exitThen(() => sendMessage('Help me solve this programming problem.'));
+        break;
+      case 'problem-solver':
+        exitThen(() => sendMessage('Solve this problem step-by-step.'));
+        break;
+      case 'image-gen':
+        exitThen(() => sendMessage('Explain this visually using text diagrams.'));
+        break;
+      case 'voice-tutor':
+        exitThen(() => toggleMic());
+        break;
+      case 'analytics':
+        exitThen(() => openProgress());
+        break;
+      case 'flashcards':
+        exitThen(() => startFlashcardReview());
+        break;
+    }
   }
 
   // ---------- Suggested prompts ----------
@@ -4703,11 +4744,33 @@ document.addEventListener('keydown', e => {
     'Create flashcards',
     'Summarize my PDF'
   ];
+  function submitPrompt(text) {
+    promptEl.value = text;
+    updateSendButton();
+    autoResize(promptEl);
+    submitPremiumPrompt();
+  }
+
+  const SUGGESTED_ACTIONS = {
+    'Explain this concept visually': () => submitPrompt('Explain this concept using diagrams.'),
+    'Generate study notes': () => submitPrompt('Generate concise study notes.'),
+    'Solve this coding problem': () => submitPrompt('Solve this coding problem step by step.'),
+    'Create flashcards': () => exitThen(() => startFlashcardReview()),
+    'Summarize my PDF': () => {
+      promptEl.value = 'Summarize this PDF (paste the PDF text here): ';
+      promptEl.focus();
+      updateSendButton();
+      autoResize(promptEl);
+    }
+  };
+
   function renderSuggested() {
     const wrap = root.querySelector('#pwSuggested');
     wrap.innerHTML = SUGGESTED.map(s => `<button class="pw-suggested-card">${s}</button>`).join('');
     wrap.querySelectorAll('.pw-suggested-card').forEach(card => {
       card.addEventListener('click', () => {
+        const action = SUGGESTED_ACTIONS[card.textContent];
+        if (action) { action(); return; }
         const ta = root.querySelector('#pwPrompt');
         ta.value = card.textContent;
         ta.focus();
