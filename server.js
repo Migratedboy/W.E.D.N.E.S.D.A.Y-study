@@ -35,7 +35,8 @@ const MODELS = (env.AI_MODELS || process.env.AI_MODELS || "")
   .map(v => v.trim())
   .filter(Boolean);
 const DEFAULT_MODELS = [
-  "meta/llama-3.1-70b-instruct"
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning" 
+
 ];
 const ACTIVE_MODELS = MODELS.length ? MODELS : DEFAULT_MODELS;
 
@@ -1236,7 +1237,19 @@ async function handleStudy(req, res, userEmail) {
     if (!Number.isFinite(maxTokens)) maxTokens = 2000;
     maxTokens = Math.max(200, Math.min(4000, Math.round(maxTokens)));
 
-    if (!message) return respond(400, { error: "Message required." });
+    // ---- Image attachments (vision) ----
+    // The client sends attached images as data: URLs (base64). We validate them the
+    // same way avatar uploads are validated, then fold them into the user turn as
+    // OpenAI-style content blocks so vision-capable models (e.g. NVIDIA's
+    // nemotron-3-nano-omni) actually receive the pixels instead of just a filename.
+    const IMAGE_DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+    const MAX_IMAGES_PER_MESSAGE = 3;
+    const MAX_IMAGE_BASE64_LEN = 4500000; // ~3.3MB decoded per image
+    const images = (Array.isArray(body.images) ? body.images : [])
+      .filter(u => typeof u === "string" && u.length <= MAX_IMAGE_BASE64_LEN && IMAGE_DATA_URL_RE.test(u))
+      .slice(0, MAX_IMAGES_PER_MESSAGE);
+
+    if (!message && !images.length) return respond(400, { error: "Message required." });
 
     const wantStream = body.stream === true;
 
@@ -1281,17 +1294,33 @@ async function handleStudy(req, res, userEmail) {
       sessionId = "";
     }
 
-    const messages = [{ role: "system", content: sysp }, ...trimmedHistory, { role: "user", content: message }];
+    // If images are attached, the CURRENT user turn's content becomes an array of
+    // content blocks (OpenAI/NIM vision format) instead of a plain string. History
+    // and persistence still use the plain-text `message` - we never store the raw
+    // image bytes back into chat history, only send them for this one request.
+    const userContent = images.length
+      ? [
+          { type: "text", text: message || "Describe what is in the attached image(s)." },
+          ...images.map(url => ({ type: "image_url", image_url: { url } }))
+        ]
+      : message;
+
+    const messages = [{ role: "system", content: sysp }, ...trimmedHistory, { role: "user", content: userContent }];
+
+    // Plain-text stand-in for the user turn when persisting to chat history - keeps
+    // history/DB storage image-free while still showing something sensible for an
+    // image-only message instead of a blank bubble.
+    const savedMessageText = message || (images.length ? "[Sent " + images.length + " image(s)]" : "");
 
     if (!apiKey) {
       const fallbackReply = buildOfflineTutorReply(message, subject);
       if (!noSave) {
         try {
           await addChatMessages(userEmail, sessionId, [
-            { role: "user", content: message, timestamp: Date.now() },
+            { role: "user", content: savedMessageText, timestamp: Date.now() },
             { role: "assistant", content: fallbackReply, model: "offline-fallback", timestamp: Date.now() }
           ]);
-          await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(message) } : {});
+          await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(savedMessageText) } : {});
         } catch (saveErr) {
           console.error("[Study] Failed to save offline fallback reply:", saveErr);
         }
@@ -1322,7 +1351,12 @@ async function handleStudy(req, res, userEmail) {
       // requested max_tokens (see computeRequestTimeoutMs), so a quick chat reply
       // still fails fast while a 3000-token quiz/rewrite gets real headroom.
       const requestBody = JSON.stringify({ model, messages, temperature: temperature, max_tokens: maxTokens, stream: wantStream });
-      const promptTokenEstimate = estimateTokens(messages.map(m => m.content).join("\n"));
+      // m.content is a plain string for every message except the current turn when
+      // images are attached (array of content blocks) - stringify defensively so
+      // this estimate never throws, it's only used for logging/telemetry.
+      const promptTokenEstimate = estimateTokens(
+        messages.map(m => (typeof m.content === "string" ? m.content : JSON.stringify(m.content))).join("\n")
+      );
       const timeoutMs = computeRequestTimeoutMs(maxTokens);
 
       console.log("Trying model...", model);
@@ -1411,10 +1445,10 @@ async function handleStudy(req, res, userEmail) {
           if (reply && !noSave) {
             try {
               await addChatMessages(userEmail, sessionId, [
-                { role: "user", content: message, timestamp: Date.now() },
+                { role: "user", content: savedMessageText, timestamp: Date.now() },
                 { role: "assistant", content: reply, model, timestamp: Date.now() }
               ]);
-              await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(message) } : {});
+              await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(savedMessageText) } : {});
               console.log("Answer saved");
               console.log("Saved to database");
             } catch (saveErr) {
@@ -1468,10 +1502,10 @@ async function handleStudy(req, res, userEmail) {
           if (!noSave) {
             try {
               await addChatMessages(userEmail, sessionId, [
-                { role: "user", content: message, timestamp: Date.now() },
+                { role: "user", content: savedMessageText, timestamp: Date.now() },
                 { role: "assistant", content: reply, model, timestamp: Date.now() }
               ]);
-              await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(message) } : {});
+              await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(savedMessageText) } : {});
               console.log("Answer saved");
               console.log("Saved to database");
             } catch (saveErr) {
@@ -1569,10 +1603,10 @@ async function handleStudy(req, res, userEmail) {
     if (!noSave) {
       try {
         await addChatMessages(userEmail, sessionId, [
-          { role: "user", content: message, timestamp: Date.now() },
+          { role: "user", content: savedMessageText, timestamp: Date.now() },
           { role: "assistant", content: fallbackReply, model: "offline-fallback", timestamp: Date.now() }
         ]);
-        await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(message) } : {});
+        await touchSession(sessionId, userEmail, isFirstMessage ? { title: truncateTitle(savedMessageText) } : {});
       } catch (saveErr) {
         console.error("[Study] Failed to save offline fallback reply after exhausting models:", saveErr);
       }
@@ -1917,7 +1951,10 @@ function readBody(req) {
     let body = "";
     req.on("data", c => {
       body += c;
-      if (body.length > 2000000) {
+      // Raised from 2MB to accommodate base64-encoded image attachments (a single
+      // screenshot easily runs 2-4MB once base64-encoded); see IMAGE_* limits in
+      // handleStudy for the actual per-image/per-request image caps.
+      if (body.length > 16000000) {
         req.destroy();
         reject(new Error("Request body too large."));
       }
