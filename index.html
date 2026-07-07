@@ -1473,7 +1473,50 @@
     .premium-modal-close svg { width:15px; height:15px; }
 
     /* ---- PremiumHero + PremiumButton + AI Status Bar ---- */
-    .premium-hero { text-align:center; padding-bottom:28px; }
+    .premium-hero { text-align:center; padding-bottom:28px; position:relative; overflow:hidden; border-radius:20px; }
+
+    /* ---- Ph2 Hero Visual System (decorative curved lines + ticker, reference-inspired) ---- */
+    .ph2-lines { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+    .ph2-line {
+      position:absolute; top:50%; height:200px; transform:translateY(-50%);
+      border:2px solid var(--accent-2); opacity:0;
+      animation: ph2LinePulse 5s ease-in-out infinite;
+    }
+    .ph2-line.l { left:-40px; border-right:none; border-radius:0 999px 999px 0; }
+    .ph2-line.r { right:-40px; border-left:none; border-radius:999px 0 0 999px; }
+    @keyframes ph2LinePulse {
+      0%   { opacity:0; transform:translateY(-50%) scale(1); }
+      15%  { opacity:.55; }
+      70%  { opacity:.18; }
+      100% { opacity:0; transform:translateY(-50%) scale(.9); }
+    }
+    @media (prefers-reduced-motion: reduce) { .ph2-line { animation:none; display:none; } }
+
+    .ph2-content { position:relative; z-index:1; }
+
+    .ph2-ticker {
+      max-width:420px; margin:0 auto 22px; height:30px; overflow:hidden;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
+      mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%);
+    }
+    .ph2-ticker-track { display:flex; gap:8px; width:max-content; animation: ph2Marquee 22s linear infinite; }
+    @keyframes ph2Marquee { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+    .ph2-tick-item {
+      font-size:11.5px; font-weight:500; color: var(--text-dim);
+      padding:6px 13px; border-radius:999px;
+      background: rgba(255,255,255,.05); border:1px solid var(--border);
+      white-space:nowrap;
+    }
+
+    .ph2-title {
+      font-size: clamp(1.6rem, 4vw, 2.1rem); font-weight:650; letter-spacing:-0.02em;
+      line-height:1.15; color: var(--text); margin-bottom:10px;
+    }
+    .ph2-accent {
+      font-family: Georgia, 'Times New Roman', serif; font-style:italic; font-weight:600;
+      color: var(--accent-2);
+    }
+
     .premium-kicker {
       display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:1.6px;
       color: var(--aurora-cyan); background: rgba(34,211,238,0.08);
@@ -2002,6 +2045,13 @@
       z-index:-1;
     }
     .pw-send-btn:disabled { cursor:default; }
+    .pw-send-btn.stop {
+      color:#fff; background:#3a3a3f; cursor:pointer;
+    }
+    .pw-send-btn.stop:hover { background:#48484f; }
+    .pw-send-btn.stop::before { display:none; }
+    .pw-icon-btn.listening { color:#ff6b6b; background:rgba(255,107,107,.12); animation:pwMicPulse 1.4s ease-in-out infinite; }
+    @keyframes pwMicPulse { 0%,100%{ box-shadow:0 0 0 0 rgba(255,107,107,.35); } 50%{ box-shadow:0 0 0 6px rgba(255,107,107,0); } }
     .pw-attach-chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 22px 10px; }
     .pw-chip {
       display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-dim);
@@ -2191,18 +2241,47 @@
       </button>
 
       <div class="premium-hero">
-        <span class="premium-kicker">PREMIUM</span>
-        <h2>Upgrade to Premium</h2>
-        <p class="premium-sub">Unlock the full W.E.D.N.E.S.D.A.Y STUDY experience</p>
+        <div class="ph2-lines" aria-hidden="true">
+          <div class="ph2-line l" style="width:70px; animation-delay:0s;"></div>
+          <div class="ph2-line l" style="width:90px; animation-delay:.6s;"></div>
+          <div class="ph2-line l" style="width:110px; animation-delay:1.2s;"></div>
+          <div class="ph2-line l" style="width:130px; animation-delay:1.8s;"></div>
+          <div class="ph2-line r" style="width:70px; animation-delay:.3s;"></div>
+          <div class="ph2-line r" style="width:90px; animation-delay:.9s;"></div>
+          <div class="ph2-line r" style="width:110px; animation-delay:1.5s;"></div>
+          <div class="ph2-line r" style="width:130px; animation-delay:2.1s;"></div>
+        </div>
 
-        <button id="premiumCtaBtn" class="premium-cta-btn aurora-border" type="button">
-          <span id="premiumCtaLabel">Upgrade to Premium</span>
-        </button>
+        <div class="ph2-content">
+          <span class="premium-kicker">PREMIUM</span>
 
-        <div class="ai-status-capsule aurora-border">
-          <span class="sparkle" aria-hidden="true">✨</span>
-          <span>Unlock unlimited AI features</span>
-          <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <div class="ph2-ticker" aria-hidden="true">
+            <div class="ph2-ticker-track">
+              <span class="ph2-tick-item">AI Tutor</span>
+              <span class="ph2-tick-item">Unlimited Messages</span>
+              <span class="ph2-tick-item">Practice Quizzes</span>
+              <span class="ph2-tick-item">Flashcards</span>
+              <span class="ph2-tick-item">Progress Analytics</span>
+              <span class="ph2-tick-item">AI Tutor</span>
+              <span class="ph2-tick-item">Unlimited Messages</span>
+              <span class="ph2-tick-item">Practice Quizzes</span>
+              <span class="ph2-tick-item">Flashcards</span>
+              <span class="ph2-tick-item">Progress Analytics</span>
+            </div>
+          </div>
+
+          <h2 class="ph2-title">Unlock your full study <span class="ph2-accent">potential</span>.</h2>
+          <p class="premium-sub">AI tutoring, unlimited practice, and priority support — on demand, whenever you need to study.</p>
+
+          <button id="premiumCtaBtn" class="premium-cta-btn aurora-border" type="button">
+            <span id="premiumCtaLabel">Upgrade to Premium</span>
+          </button>
+
+          <div class="ai-status-capsule aurora-border">
+            <span class="sparkle" aria-hidden="true">✨</span>
+            <span>Unlock unlimited AI features</span>
+            <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
         </div>
       </div>
 
@@ -3410,11 +3489,12 @@ function rateFlashcard(quality) {
   });
 }
 
-async function askAI(message, systemPrompt, temperature = 0.4, persist = true, maxTokens = null, onProgress = null) {
+async function askAI(message, systemPrompt, temperature = 0.4, persist = true, maxTokens = null, onProgress = null, signal = null, images = null) {
   const r = await fetch('/api/study', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, subject: currentSubject, systemPrompt, history: [], temperature, noSave: !persist, stream: true, ...(maxTokens ? { maxTokens } : {}) })
+    body: JSON.stringify({ message, subject: currentSubject, systemPrompt, history: [], temperature, noSave: !persist, stream: true, ...(maxTokens ? { maxTokens } : {}), ...(images && images.length ? { images } : {}) }),
+    ...(signal ? { signal } : {})
   });
 
   const ctype = r.headers.get('content-type') || '';
@@ -3465,11 +3545,14 @@ function needsReviewPass(message, initial) {
   return wantsDepth || isLongAnswer;
 }
 
-async function premiumLoop(message, systemPrompt, onProgress) {
+async function premiumLoop(message, systemPrompt, onProgress, signal = null, images = null) {
   const notify = typeof onProgress === 'function' ? onProgress : () => {};
 
   notify('Generating initial explanation…');
-  const initial = await askAI(message, systemPrompt, 0.4);
+  // Images only matter for the FIRST pass - the review/rewrite passes below work
+  // off the text of that initial explanation, so there's no need (or way, without
+  // re-uploading) to re-attach them on every subsequent call.
+  const initial = await askAI(message, systemPrompt, 0.4, true, null, null, signal, images);
 
   if (askAI.lastWasFallback) return initial;
   if (!needsReviewPass(message, initial)) return initial;
@@ -3481,7 +3564,7 @@ async function premiumLoop(message, systemPrompt, onProgress) {
     'Explanation to review:\n' + initial + '\n\n' +
     'List any missing concepts, inaccuracies, unclear points, or weaknesses in this explanation. ' +
     'Be specific and concise. If it is already excellent, say so briefly.';
-  const review = await askAI(reviewPrompt, 'You are a strict but constructive academic reviewer.', 0.3);
+  const review = await askAI(reviewPrompt, 'You are a strict but constructive academic reviewer.', 0.3, true, null, null, signal);
 
   if (askAI.lastWasFallback) return initial;
 
@@ -3492,7 +3575,7 @@ async function premiumLoop(message, systemPrompt, onProgress) {
     'Reviewer feedback:\n' + review + '\n\n' +
     'Rewrite the explanation to address the feedback, filling any gaps and fixing any weaknesses. ' +
     'Keep the same tone and formatting style as the original (markdown, headers, bullet points, examples).';
-  const improved = await askAI(rewritePrompt, systemPrompt, 0.4);
+  const improved = await askAI(rewritePrompt, systemPrompt, 0.4, true, null, null, signal);
 
   if (askAI.lastWasFallback) return initial;
   return improved;
@@ -4581,21 +4664,24 @@ document.addEventListener('keydown', e => {
             <div class="pw-suggested" id="pwSuggested"></div>
 
             <div class="pw-composer-wrap">
+              <div class="pw-attach-chips" id="pwAttachChips"></div>
               <div class="pw-composer" id="pwComposer">
+                <input type="file" id="pwFileInput" multiple style="display:none">
+                <input type="file" id="pwImageInput" accept="image/*" multiple style="display:none">
                 <textarea id="pwPrompt" placeholder="What would you like to build today?" rows="1"></textarea>
                 <div class="pw-composer-icons">
-                  <button class="pw-icon-btn" title="Attach file" aria-label="Attach file">
+                  <button class="pw-icon-btn" id="pwAttachBtn" title="Attach file" aria-label="Attach file">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                   </button>
-                  <button class="pw-icon-btn" title="Voice input" aria-label="Voice input">
+                  <button class="pw-icon-btn" id="pwVoiceBtn" title="Voice input" aria-label="Voice input">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
                   </button>
-                  <button class="pw-icon-btn" title="Upload image" aria-label="Upload image">
+                  <button class="pw-icon-btn" id="pwImageBtn" title="Upload image" aria-label="Upload image">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
                   </button>
                 </div>
                 <button class="pw-send-btn" id="pwSendBtn" aria-label="Send" disabled>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                  <svg id="pwSendIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                 </button>
               </div>
             </div>
@@ -4738,17 +4824,104 @@ document.addEventListener('keydown', e => {
   }
 
   // ---------- Composer ----------
-  const promptEl = root.querySelector('#pwPrompt');
-  const sendBtn  = root.querySelector('#pwSendBtn');
+  const promptEl    = root.querySelector('#pwPrompt');
+  const sendBtn     = root.querySelector('#pwSendBtn');
+  const sendIcon    = root.querySelector('#pwSendIcon');
+  const attachBtn   = root.querySelector('#pwAttachBtn');
+  const imageBtn    = root.querySelector('#pwImageBtn');
+  const voiceBtn    = root.querySelector('#pwVoiceBtn');
+  const fileInput   = root.querySelector('#pwFileInput');
+  const imageInput  = root.querySelector('#pwImageInput');
+  const chipsWrap   = root.querySelector('#pwAttachChips');
+
+  const SEND_ICON = '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>';
+  const STOP_ICON = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+
+  let pwAttachedFiles = [];
+  let pwGenerating = false;
+  let pwAbortController = null;
+
   function autoResize(el) {
     el.style.height = 'auto';
     el.style.height = Math.min(180, el.scrollHeight) + 'px';
   }
+
   function updateSendButton() {
-    const hasText = promptEl.value.trim().length > 0;
-    sendBtn.classList.toggle('ready', hasText);
-    sendBtn.disabled = !hasText;
+    if (pwGenerating) {
+      sendBtn.classList.add('ready', 'stop');
+      sendBtn.disabled = false;
+      sendIcon.innerHTML = STOP_ICON;
+      sendBtn.setAttribute('aria-label', 'Stop');
+      sendBtn.title = 'Stop generating';
+      return;
+    }
+    sendBtn.classList.remove('stop');
+    sendIcon.innerHTML = SEND_ICON;
+    sendBtn.setAttribute('aria-label', 'Send');
+    sendBtn.title = 'Send';
+    const hasContent = promptEl.value.trim().length > 0 || pwAttachedFiles.length > 0;
+    sendBtn.classList.toggle('ready', hasContent);
+    sendBtn.disabled = !hasContent;
   }
+
+  function renderChips() {
+    chipsWrap.innerHTML = pwAttachedFiles.map((f, i) => `
+      <span class="pw-chip" data-i="${i}">
+        <span>${escapeHtml(f.name.length > 24 ? f.name.slice(0, 21) + '…' : f.name)}</span>
+        <button type="button" aria-label="Remove ${escapeHtml(f.name)}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </span>
+    `).join('');
+    chipsWrap.querySelectorAll('.pw-chip button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.parentElement.dataset.i);
+        pwAttachedFiles.splice(i, 1);
+        renderChips();
+        updateSendButton();
+      });
+    });
+  }
+
+  function addFiles(fileList) {
+    Array.from(fileList).forEach(f => pwAttachedFiles.push(f));
+    renderChips();
+    updateSendButton();
+  }
+
+  attachBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+
+  imageBtn.addEventListener('click', () => imageInput.click());
+  imageInput.addEventListener('change', () => { addFiles(imageInput.files); imageInput.value = ''; });
+
+  // ---------- Voice input ----------
+  let pwRecognition = null;
+  let pwListening = false;
+  function togglePwVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert('Speech recognition not supported. Try Chrome/Edge.'); return; }
+    if (pwListening) {
+      try { pwRecognition && pwRecognition.stop(); } catch {}
+      return;
+    }
+    pwRecognition = new SR();
+    pwRecognition.lang = 'en-US';
+    pwRecognition.interimResults = false;
+    pwRecognition.onresult = e => {
+      const transcript = Array.from(e.results).map(r => r[0].transcript).join(' ');
+      promptEl.value = (promptEl.value.trim() + ' ' + transcript).trim();
+      updateSendButton();
+      autoResize(promptEl);
+    };
+    pwRecognition.onend = () => { pwListening = false; voiceBtn.classList.remove('listening'); };
+    pwRecognition.onerror = () => { pwListening = false; voiceBtn.classList.remove('listening'); };
+    pwRecognition.start();
+    pwListening = true;
+    voiceBtn.classList.add('listening');
+  }
+  voiceBtn.addEventListener('click', togglePwVoice);
+
   promptEl.addEventListener('input', () => { updateSendButton(); autoResize(promptEl); });
   promptEl.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -4756,7 +4929,13 @@ document.addEventListener('keydown', e => {
       if (!sendBtn.disabled) sendBtn.click();
     }
   });
-  sendBtn.addEventListener('click', () => submitPremiumPrompt());
+  sendBtn.addEventListener('click', () => {
+    if (pwGenerating) {
+      if (pwAbortController) pwAbortController.abort();
+      return;
+    }
+    submitPremiumPrompt();
+  });
   function autoResizeInit() { autoResize(promptEl); }
 
   // ---------- View switching ----------
@@ -4906,9 +5085,51 @@ document.addEventListener('keydown', e => {
     aiLabel.textContent = thinking ? 'Thinking…' : 'AI Ready';
   }
 
+  // Reads image Files as base64 data URLs so they can actually be sent to a
+  // vision-capable model, instead of only sending the filename as text (which is
+  // all the AI used to receive - it correctly had no idea what the image showed).
+  const PW_MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB raw file size cap per image
+  const PW_MAX_IMAGES = 3;
+  async function filesToImageDataUrls(files) {
+    const urls = [];
+    for (const f of files.slice(0, PW_MAX_IMAGES)) {
+      if (f.size > PW_MAX_IMAGE_BYTES) continue;
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Could not read ' + f.name));
+          reader.readAsDataURL(f);
+        });
+        urls.push(dataUrl);
+      } catch (e) {
+        console.error('[Attach] failed to read image:', e);
+      }
+    }
+    return urls;
+  }
+
   async function submitPremiumPrompt() {
-    const text = promptEl.value.trim();
-    if (!text) return;
+    if (pwGenerating) return;
+    let text = promptEl.value.trim();
+    const files = pwAttachedFiles.slice();
+    if (!text && files.length === 0) return;
+
+    const imageFiles = files.filter(f => f.type && f.type.startsWith('image/'));
+    const otherFiles = files.filter(f => !(f.type && f.type.startsWith('image/')));
+    const images = imageFiles.length ? await filesToImageDataUrls(imageFiles) : [];
+
+    if (otherFiles.length) {
+      text = (text ? text + '\n\n' : '') + 'Attached file(s): ' + otherFiles.map(f => f.name).join(', ');
+    }
+    if (images.length && !text) {
+      text = 'What is in this image?';
+    }
+    promptEl.value = '';
+    pwAttachedFiles = [];
+    renderChips();
+    autoResize(promptEl);
+
     const area = root.querySelector('#pwResponseArea');
     const card = document.createElement('div');
     card.className = 'pw-response-card';
@@ -4937,19 +5158,29 @@ document.addEventListener('keydown', e => {
     });
 
     setAiStatus(true);
+    pwGenerating = true;
+    pwAbortController = new AbortController();
+    updateSendButton();
     const sysp = 'You are an expert tutor. Subject: ' + currentSubject + '. Give clear, structured answers with examples, bullet points, and headers. Use markdown formatting.' +
       (notesEl.value.trim() ? ' Student notes: ' + notesEl.value.trim().slice(0, 600) : '');
     try {
       const reply = await premiumLoop(text, sysp, (msg) => {
         bodyEl.innerHTML = '<div class="pw-thinking-row">' + calcLoaderHTML(msg, 'lg') + '</div>';
-      });
+      }, pwAbortController.signal, images);
       const cleaned = String(reply).replace(/<\s*\/?\s*br\s*>/gi, '\n');
       const html = renderMarkdown(cleanLatex(cleaned));
       bodyEl.classList.remove('pw-thinking-row');
       bodyEl.innerHTML = html;
     } catch (e) {
-      bodyEl.innerHTML = '❌ <strong>AI Error:</strong> ' + escapeHtml(e.message);
+      if (e.name === 'AbortError') {
+        bodyEl.innerHTML = '⏹ Stopped.';
+      } else {
+        bodyEl.innerHTML = '❌ <strong>AI Error:</strong> ' + escapeHtml(e.message);
+      }
     }
+    pwGenerating = false;
+    pwAbortController = null;
+    updateSendButton();
     setAiStatus(false);
   }
 
