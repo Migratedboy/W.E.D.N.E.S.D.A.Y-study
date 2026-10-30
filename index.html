@@ -2133,21 +2133,24 @@
     .pw-body th { color:var(--text); background:rgba(255,255,255,.04); font-weight:600; }
     .pw-code-block {
       margin:14px 0; border-radius:12px; overflow:hidden;
-      border:1px solid var(--border); background:#0a0a0a;
+      border:1px solid var(--border-hi); background:#0c0c0e;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
     .pw-code-head {
       display:flex; justify-content:space-between; align-items:center;
-      padding:8px 14px; background:rgba(255,255,255,.04);
-      font-size:11px; color:var(--text-muted); font-family:var(--font-mono);
+      padding:8px 14px; background:rgba(255,255,255,.05);
+      font-size:11px; color:var(--text-dim); font-family:var(--font-mono);
+      border-bottom:1px solid var(--border);
     }
     .pw-copy-btn {
-      background:none; border:1px solid var(--border);
-      color:var(--text-dim); font-size:11px; padding:3px 9px;
+      background:rgba(255,255,255,.04); border:1px solid var(--border);
+      color:var(--text-dim); font-size:11px; padding:4px 10px;
       border-radius:6px; cursor:pointer;
       transition: all .2s var(--ease); font-family:var(--font-sans);
+      font-weight:500;
     }
-    .pw-copy-btn:hover { background:rgba(255,255,255,.08); color:var(--text); }
-    .pw-copy-btn.copied { color:var(--aurora-emerald); border-color:rgba(52,211,153,.4); }
+    .pw-copy-btn:hover { background:rgba(255,255,255,.12); color:var(--text); border-color:var(--border-hi); }
+    .pw-copy-btn.copied { color:#5FE38B; border-color:rgba(95,227,139,.4); background:rgba(95,227,139,.08); }
     .pw-code-block pre { margin:0; padding:14px; overflow-x:auto; font-family:var(--font-mono); font-size:12.5px; line-height:1.6; }
     .pw-code-block code { background:none; border:none; padding:0; color:inherit; }
     .pw-tok-kw { color:#c586c0; } .pw-tok-str { color:#ce9178; } .pw-tok-com { color:#6a9955; font-style:italic; } .pw-tok-num { color:#b5cea8; }
@@ -2353,10 +2356,14 @@
       </div>
 
       <div id="notesSection">
-        <div class="section-label"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6"/><path d="M9 17h4"/></svg> NOTES — <span id="subjLbl">General</span></div>
+        <div class="section-label" style="display:flex;justify-content:space-between;align-items:center;">
+          <span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6"/><path d="M9 17h4"/></svg> NOTES — <span id="subjLbl">General</span></span>
+          <span id="notesStatus" style="font-size:10px;text-transform:none;color:var(--text-muted);font-weight:400;">Saved</span>
+        </div>
         <textarea id="notes" placeholder="Write your notes here…"></textarea>
         <div class="notes-actions">
           <button id="saveNotes" class="micro-btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> Save</button>
+          <button id="exportNotes" class="micro-btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export</button>
           <button id="clearNotes" class="micro-btn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Clear</button>
         </div>
       </div>
@@ -2405,11 +2412,13 @@
   <div id="timer">
     <div id="timerDisplay">25:00</div>
     <div id="timerLabel">FOCUS TIMER</div>
-    <div class="timer-btns">
-      <button data-mins="25">25m</button>
-      <button data-mins="45">45m</button>
-      <button data-mins="10">10m</button>
-      <button id="timerStop"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
+    <div class="timer-btns" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+      <button data-mins="25" data-label="FOCUS">25m Focus</button>
+      <button data-mins="5" data-label="SHORT BREAK">5m Break</button>
+      <button data-mins="15" data-label="LONG BREAK">15m Break</button>
+    </div>
+    <div class="timer-btns" style="margin-top:6px;">
+      <button id="timerStop" style="color:#FF8A8A;"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> Stop Timer</button>
     </div>
   </div>
 
@@ -2653,14 +2662,51 @@ function bindEvents() {
     });
   });
 
-  $('saveNotes').addEventListener('click', () => {
+  let notesSaveTimer = null;
+  function updateNotesStatus(msg) {
+    const statusEl = $('notesStatus');
+    if (statusEl) statusEl.textContent = msg;
+  }
+
+  function saveCurrentNotes(isAuto = false) {
     localStorage.setItem('snotes_' + currentSubject, notesEl.value);
-    flashInChat('ai', '✅ Notes saved for <strong>' + currentSubject + '</strong>');
+    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    updateNotesStatus('Saved ' + nowStr);
+    if (!isAuto) {
+      flashInChat('ai', '✅ Notes saved for <strong>' + currentSubject + '</strong>');
+    }
+  }
+
+  notesEl.addEventListener('input', () => {
+    updateNotesStatus('Saving…');
+    if (notesSaveTimer) clearTimeout(notesSaveTimer);
+    notesSaveTimer = setTimeout(() => saveCurrentNotes(true), 1000);
   });
+
+  $('saveNotes').addEventListener('click', () => {
+    if (notesSaveTimer) clearTimeout(notesSaveTimer);
+    saveCurrentNotes(false);
+  });
+
+  $('exportNotes').addEventListener('click', () => {
+    const val = notesEl.value.trim();
+    if (!val) { alert('No notes to export for ' + currentSubject + '.'); return; }
+    const blob = new Blob([val], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentSubject.toLowerCase() + '-notes.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
   $('clearNotes').addEventListener('click', () => {
     if (confirm('Clear notes for ' + currentSubject + '?')) {
       notesEl.value = '';
       localStorage.removeItem('snotes_' + currentSubject);
+      updateNotesStatus('Cleared');
     }
   });
 
@@ -2688,7 +2734,11 @@ function bindEvents() {
 
   $('timerBtn').addEventListener('click', () => timerEl.classList.toggle('show'));
   document.querySelectorAll('.timer-btns button[data-mins]').forEach(b => {
-    b.addEventListener('click', () => startTimer(parseInt(b.dataset.mins)));
+    b.addEventListener('click', () => {
+      const label = b.dataset.label || 'TIMER';
+      $('timerLabel').textContent = label;
+      startTimer(parseInt(b.dataset.mins));
+    });
   });
   $('timerStop').addEventListener('click', stopTimer);
 
@@ -4186,6 +4236,32 @@ function toggleMic() {
   $('micBtn').classList.add('listening');
 }
 
+function playTimerChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    // Play two subtle harmonic chimes
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+      gain.gain.setValueAtTime(0, now + i * 0.12);
+      gain.gain.linearRampToValueAtTime(0.18, now + i * 0.12 + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.8);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.85);
+    });
+  } catch (e) {
+    console.warn('Audio chime failed:', e);
+  }
+}
+
 function startTimer(mins) {
   stopTimer();
   timerSecs = mins * 60;
@@ -4196,11 +4272,16 @@ function startTimer(mins) {
     updateTimer();
     if (timerSecs <= 0) {
       stopTimer();
-      flashInChat('ai', '⏰ <strong>Timer done!</strong> Take a short break!');
+      playTimerChime();
+      flashInChat('ai', '⏰ <strong>Timer complete!</strong> Great session!');
     }
   }, 1000);
 }
-function stopTimer() { if (timerInt) clearInterval(timerInt); timerInt = null; }
+function stopTimer() {
+  if (timerInt) clearInterval(timerInt);
+  timerInt = null;
+  $('timerLabel').textContent = 'FOCUS TIMER';
+}
 function updateTimer() {
   const m = Math.floor(timerSecs / 60), s = timerSecs % 60;
   timerDisplay.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
@@ -4239,26 +4320,100 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
+function copyCodeToClipboard(btn) {
+  const codeEl = btn.closest('.pw-code-block').querySelector('code');
+  if (!codeEl) return;
+  navigator.clipboard.writeText(codeEl.textContent).then(() => {
+    btn.classList.add('copied');
+    btn.textContent = 'Copied!';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.textContent = 'Copy Code';
+    }, 2000);
+  }).catch(err => console.error('Copy failed:', err));
+}
+window.copyCodeToClipboard = copyCodeToClipboard;
+
 function renderMarkdown(text) {
-  return String(text)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/###\s+(.+)/g, '<h3 style="color:#ffffff;margin:14px 0 6px;font-size:1.05em;">$1</h3>')
-    .replace(/##\s+(.+)/g, '<h2 style="color:#ffffff;margin:16px 0 8px;font-size:1.2em;">$1</h2>')
-    .replace(/#\s+(.+)/g, '<h1 style="color:#ffffff;margin:18px 0 10px;font-size:1.4em;">$1</h1>')
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffffff">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/^[\-\*]\s+(.+)$/gm, '<div style="padding-left:14px;margin:2px 0;">• $1</div>')
-    .replace(/^\d+\.\s+(.+)$/gm, '<div style="padding-left:14px;margin:2px 0;">$&</div>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/^/, '<p>')
-    .replace(/$/, '</p>')
-    .replace(/<p><\/p>/g, '')
-    .replace(/<p>(<h[1-3])/g, '$1')
-    .replace(/(<\/h[1-3]>)<\/p>/g, '$1')
-    .replace(/<p>(<div)/g, '$1')
-    .replace(/(<\/div>)<\/p>/g, '$1');
+  if (!text) return '';
+
+  let s = String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Extract code blocks to avoid corruption by paragraph/list processing
+  const codeBlocks = [];
+  s = s.replace(/```([a-zA-Z0-9_\-#\+]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    const idx = codeBlocks.length;
+    const cleanLang = lang.trim() || 'code';
+    const codeHtml = `<div class="pw-code-block"><div class="pw-code-head"><span>${escapeHtml(cleanLang)}</span><button class="pw-copy-btn" onclick="copyCodeToClipboard(this)">Copy Code</button></div><pre><code>${code.trim()}</code></pre></div>`;
+    codeBlocks.push(codeHtml);
+    return `__CODE_BLOCK_${idx}__`;
+  });
+
+  // Headers
+  s = s.replace(/###\s+(.+)/g, '<h3 style="color:#ffffff;margin:16px 0 8px;font-size:1.08em;font-weight:600;">$1</h3>')
+       .replace(/##\s+(.+)/g, '<h2 style="color:#ffffff;margin:18px 0 10px;font-size:1.25em;font-weight:650;">$1</h2>')
+       .replace(/#\s+(.+)/g, '<h1 style="color:#ffffff;margin:20px 0 12px;font-size:1.45em;font-weight:700;">$1</h1>');
+
+  // Blockquotes
+  s = s.replace(/^>\s+(.+)$/gm, '<blockquote class="pw-callout">$1</blockquote>');
+
+  // Horizontal rules
+  s = s.replace(/^[\-\*_]{3,}$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">');
+
+  // Bold / Italic / Inline Code
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+       .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffffff">$1</strong>')
+       .replace(/\*(.+?)\*/g, '<em>$1</em>')
+       .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Markdown Tables
+  s = s.replace(/(?:^\|.+\|\r?\n){2,}/gm, (tableMatch) => {
+    const lines = tableMatch.trim().split(/\r?\n/);
+    if (lines.length < 2) return tableMatch;
+
+    // Check for delimiter line
+    const isDelimiter = (line) => /^\|(?:\s*:?-+:?\s*\|)+$/.test(line.trim());
+    let headerLine = '', rows = [];
+    if (isDelimiter(lines[1])) {
+      headerLine = lines[0];
+      rows = lines.slice(2);
+    } else {
+      rows = lines;
+    }
+
+    let tableHtml = '<table style="border-collapse:collapse;width:100%;margin:14px 0;font-size:13px;">';
+    if (headerLine) {
+      const headers = headerLine.split('|').slice(1, -1).map(h => `<th style="border:1px solid var(--border);padding:8px 10px;text-align:left;background:rgba(255,255,255,0.04);color:#fff;">${h.trim()}</th>`).join('');
+      tableHtml += `<thead><tr>${headers}</tr></thead>`;
+    }
+    tableHtml += '<tbody>';
+    for (const r of rows) {
+      const cells = r.split('|').slice(1, -1).map(c => `<td style="border:1px solid var(--border);padding:8px 10px;text-align:left;">${c.trim()}</td>`).join('');
+      tableHtml += `<tr>${cells}</tr>`;
+    }
+    tableHtml += '</tbody></table>';
+    return tableHtml;
+  });
+
+  // Bullet and numbered lists
+  s = s.replace(/^[\-\*]\s+(.+)$/gm, '<div style="padding-left:16px;margin:3px 0;display:flex;gap:8px;"><span style="color:var(--accent);">•</span><span>$1</span></div>')
+       .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="padding-left:16px;margin:3px 0;display:flex;gap:8px;"><span style="color:var(--accent-2);font-weight:600;">$1.</span><span>$2</span></div>');
+
+  // Paragraphs
+  s = s.replace(/\n\n/g, '</p><p>')
+       .replace(/^/, '<p>')
+       .replace(/$/, '</p>')
+       .replace(/<p>\s*<\/p>/g, '')
+       .replace(/<p>(<h[1-3]|<blockquote|<table|<div|<hr)/g, '$1')
+       .replace(/(<\/h[1-3]>|<\/blockquote>|<\/table>|<\/div>|<hr>)\s*<\/p>/g, '$1');
+
+  // Restore code blocks
+  s = s.replace(/__CODE_BLOCK_(\d+)__/g, (match, idx) => codeBlocks[Number(idx)] || '');
+
+  return s;
 }
 
 function cleanLatex(text) {
@@ -4333,6 +4488,45 @@ document.addEventListener('keydown', e => {
     if ($('premiumOverlay').classList.contains('show') && window.PremiumModal) window.PremiumModal.close();
     if ($('premiumWorkspace').classList.contains('show') && window.PremiumWorkspace) window.PremiumWorkspace.close();
   }
+
+  // Keyboard navigation for Flashcards overlay
+  if ($('flashcard-overlay').style.display === 'flex') {
+    if (e.key === ' ' || e.key === 'Enter') {
+      const frontEl = $('fc-front');
+      if (frontEl && frontEl.style.display !== 'none') {
+        e.preventDefault();
+        $('fc-reveal').click();
+        return;
+      }
+    }
+    const backEl = $('fc-back');
+    if (backEl && backEl.style.display === 'flex') {
+      if (e.key === '1') { e.preventDefault(); rateFlashcard(1); return; }
+      if (e.key === '2') { e.preventDefault(); rateFlashcard(4); return; }
+      if (e.key === '3') { e.preventDefault(); rateFlashcard(5); return; }
+    }
+  }
+
+  // Keyboard navigation for Quiz overlay
+  if ($('quiz-overlay').style.display === 'flex' && $('quiz-body').style.display !== 'none') {
+    const key = e.key.toUpperCase();
+    const optMap = { '1': 0, 'A': 0, '2': 1, 'B': 1, '3': 2, 'C': 2, '4': 3, 'D': 3 };
+    if (key in optMap && !quizLocked) {
+      e.preventDefault();
+      selectQuizOption(optMap[key]);
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!quizLocked && !$('quiz-submit').disabled) {
+        submitQuizAnswer();
+      } else if (quizLocked && $('quiz-next').style.display !== 'none') {
+        nextQuizQuestion();
+      }
+      return;
+    }
+  }
+
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault();
     localStorage.setItem('snotes_' + currentSubject, notesEl.value);
