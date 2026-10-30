@@ -1981,16 +1981,17 @@ async function parseJson(req) {
 function sendJson(res, status, data) { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(data)); }
 function stripSlash(v) { return v.replace(/\/$/, ""); }
 function cleanReply(value, escapeForHtml = true) {
-  const sanitized = String(value)
+  const sanitized = String(value || "")
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "")
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+    .replace(/<object[\s\S]*?>[\s\S]*?<\/object>/gi, "")
+    .replace(/<embed[\s\S]*?>[\s\S]*?<\/embed>/gi, "")
     .replace(/<tool_call[\s\S]*?<\/tool_call>/gi, "")
     .replace(/<\/?(?:tool_call|arg_key|arg_value)[^>]*>/gi, "")
     .replace(/`{1,3}\s*tool_code[\s\S]*?`{1,3}/gi, "")
     .trim();
-  // HTML-escaping is only appropriate for replies that will later be inserted as
-  // markup in the chat UI. noSave callers (e.g. the quiz generator) consume the raw
-  // reply programmatically - JSON.parse-ing it - so escaping quotes/brackets to
-  // &quot;/&amp;/etc. here would corrupt the JSON before the client ever sees it.
+
   if (!escapeForHtml) return sanitized;
   return sanitized
     .replace(/&/g, "&amp;")
