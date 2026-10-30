@@ -1981,7 +1981,7 @@ async function parseJson(req) {
 function sendJson(res, status, data) { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(data)); }
 function stripSlash(v) { return v.replace(/\/$/, ""); }
 function cleanReply(value, escapeForHtml = true) {
-  let sanitized = String(value || "")
+  const sanitized = String(value || "")
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
     .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "")
     .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
@@ -1992,10 +1992,13 @@ function cleanReply(value, escapeForHtml = true) {
     .replace(/`{1,3}\s*tool_code[\s\S]*?`{1,3}/gi, "")
     .trim();
 
-  if (escapeForHtml) {
-    sanitized = sanitized.replace(/<\/?(?:script|iframe|style|object|embed|form|input|button)[^>]*>/gi, "");
-  }
-  return sanitized;
+  if (!escapeForHtml) return sanitized;
+  return sanitized
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 function findIndexFile() {
   for (const name of ["study-app.html", "index.html", "app.html", "main.html"]) {
