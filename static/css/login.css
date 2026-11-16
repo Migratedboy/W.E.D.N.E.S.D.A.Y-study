@@ -1,0 +1,20 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d0d12; color: #eee; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.card { width: 100%; max-width: 400px; background: #16161e; border: 1px solid #2a2a38; border-radius: 16px; padding: 32px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+h1 { font-size: 20px; text-align: center; letter-spacing: 2px; margin-bottom: 4px; color: #b18cff; }
+.sub { text-align: center; color: #888; font-size: 13px; margin-bottom: 24px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.tabs button { flex: 1; padding: 10px; background: #1e1e2a; color: #aaa; border: 1px solid #2a2a38; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.tabs button.active { background: #6c3ce9; color: #fff; border-color: #6c3ce9; }
+label { display: block; font-size: 12px; color: #999; margin: 14px 0 6px; }
+input { width: 100%; padding: 12px; background: #0d0d12; border: 1px solid #2a2a38; border-radius: 8px; color: #fff; font-size: 15px; }
+input:focus { outline: none; border-color: #6c3ce9; }
+.code-input { text-align: center; font-size: 28px; letter-spacing: 12px; margin-top: 8px; }
+.btn { width: 100%; margin-top: 20px; padding: 13px; background: #6c3ce9; border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
+.btn:hover { background: #7d51f0; }
+.btn:disabled { opacity: .5; cursor: wait; }
+.link { display: block; width: 100%; margin-top: 14px; text-align: center; background: none; border: none; color: #b18cff; font-size: 13px; cursor: pointer; }
+.msg { margin-top: 14px; font-size: 13px; text-align: center; min-height: 18px; }
+.msg.error { color: #ff6b6b; }
+.msg.ok { color: #5ad18f; }
+.hidden { display: none; }
