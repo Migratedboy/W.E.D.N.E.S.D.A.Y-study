@@ -8,6 +8,20 @@ import { createServer } from "node:http";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
+import { hashPassword, verifyPassword, hashSessionToken, safeCompareCode } from "./lib/auth.js";
+import { reviewFlashcard, applyStudyProgress, quizXp } from "./lib/scheduling.js";
+import { isPremiumRequest as isPremiumRequestPure, rateLimitFor } from "./lib/entitlement.js";
+import {
+  extractJsonArray as extractJsonArrayPure,
+  normalizeQuizQuestions,
+  cleanReply as cleanReplyPure,
+  formatIsoDuration as formatIsoDurationPure,
+  rankVideos as rankVideosPure,
+  estimateTokens as estimateTokensPure,
+  truncateHistoryToBudget as truncateHistoryToBudgetPure,
+  computeRequestTimeoutMs as computeRequestTimeoutMsPure,
+  gradeQuiz
+} from "./lib/text.js";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 
@@ -16,6 +30,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = __dirname;
 const port = Number(process.env.PORT || 4174);
+// 0.0.0.0 keeps the server reachable in Docker/containers and on PaaS hosts.
+// Override with HOST=127.0.0.1 if you only ever want loopback access.
+const host = String(process.env.HOST || "0.0.0.0").trim() || "0.0.0.0";
 
 const env = loadEnv(join(root, ".env"));
 const apiKey = (env.AI_API_KEY || process.env.AI_API_KEY || "").trim();
@@ -58,15 +75,19 @@ const AI_TIMEOUT_FIXED_MS = Number(env.AI_TIMEOUT_MS || process.env.AI_TIMEOUT_M
 
 function computeRequestTimeoutMs(maxTokens) {
   if (AI_TIMEOUT_FIXED_MS) return AI_TIMEOUT_FIXED_MS;
-  const scaled = AI_TIMEOUT_BASE_MS + (Number(maxTokens) || 0) * AI_TIMEOUT_PER_TOKEN_MS;
-  return Math.max(AI_TIMEOUT_FLOOR_MS, Math.min(AI_TIMEOUT_CEILING_MS, Math.round(scaled)));
+  return Math.round(computeRequestTimeoutMsPure(maxTokens, {
+    base: AI_TIMEOUT_BASE_MS,
+    perToken: AI_TIMEOUT_PER_TOKEN_MS,
+    floor: AI_TIMEOUT_FLOOR_MS,
+    ceiling: AI_TIMEOUT_CEILING_MS
+  }));
 }
 
 // Cheap, provider-agnostic token estimate (~4 chars/token for English) - good
 // enough for logging/budgeting decisions, not meant to match the provider's
 // exact tokenizer.
 function estimateTokens(text) {
-  return Math.ceil(String(text || "").length / 4);
+  return estimateTokensPure(text);
 }
 
 // Caps the total character budget of chat history fed into a prompt, dropping
@@ -76,17 +97,7 @@ function estimateTokens(text) {
 // still blow up prompt size and therefore latency - see Deliverable #8.
 const HISTORY_CHAR_BUDGET = Number(env.AI_HISTORY_CHAR_BUDGET || process.env.AI_HISTORY_CHAR_BUDGET || 12000);
 function truncateHistoryToBudget(history, charBudget = HISTORY_CHAR_BUDGET) {
-  let total = history.reduce((sum, m) => sum + (m.content ? m.content.length : 0), 0);
-  if (total <= charBudget) return { history, truncatedCount: 0 };
-  const kept = [];
-  let running = 0;
-  for (let i = history.length - 1; i >= 0; i--) {
-    const len = history[i].content ? history[i].content.length : 0;
-    if (running + len > charBudget && kept.length > 0) break; // always keep at least the most recent turn
-    kept.unshift(history[i]);
-    running += len;
-  }
-  return { history: kept, truncatedCount: history.length - kept.length };
+  return truncateHistoryToBudgetPure(history, charBudget);
 }
 // Used only by the premium "AI Learning Resources" feature (YouTube search). Optional -
 // if unset, that feature responds with a clear 503 instead of failing silently.
@@ -137,7 +148,30 @@ const mime = {
   ".svg": "image/svg+xml"
 };
 
-const CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://i.ytimg.com https://img.youtube.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';";
+// Single source of truth for CSP. There used to be a second, conflicting policy
+// in a <meta> tag in index.html; browsers intersect the two, so the strictest
+// wins and you end up debugging a policy you did not write. The meta tags are
+// gone - this header is the only one now.
+//
+// 'unsafe-inline' is NOT needed for scripts any more: app.js/login.js are
+// external files and the last two inline handlers were converted to
+// addEventListener. It is kept for style-src only, because the UI uses inline
+// style attributes throughout.
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self' https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  // YouTube thumbnails (AI Learning Resources) plus Supabase Storage avatars,
+  // which are served from *.supabase.co.
+  "img-src 'self' data: https://i.ytimg.com https://img.youtube.com https://*.supabase.co",
+  "connect-src 'self' https://cdn.jsdelivr.net",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'"
+];
+const CONTENT_SECURITY_POLICY = CSP_DIRECTIVES.join("; ") + ";";
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
@@ -392,17 +426,7 @@ async function getUserRank(userEmail) {
 // ============================================
 // AUTH (email + password, 6-digit email codes)
 // ============================================
-function hashPassword(password) {
-  const salt = randomBytes(16).toString("hex");
-  return salt + ":" + scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex");
-}
 
-function verifyPassword(password, stored) {
-  const [salt, hash] = String(stored || "").split(":");
-  if (!salt || !hash) return false;
-  const computed = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex");
-  return computed.length === hash.length && timingSafeEqual(Buffer.from(computed), Buffer.from(hash));
-}
 
 function generateCode() {
   return String(randomInt(100000, 1000000)); // always 6 digits
@@ -443,8 +467,12 @@ function clearSessionCookie(req) {
 
 async function createSession(email) {
   const token = randomBytes(32).toString("hex");
+  // Only the hash is persisted. A leaked database dump therefore yields no
+  // usable session cookies - the raw token never leaves this function.
   const { error } = await supabase.from("sessions").insert({
-    token, email, expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    token: hashSessionToken(token),
+    email,
+    expires_at: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000).toISOString()
   });
   throwIfError(error);
   return token;
@@ -453,11 +481,24 @@ async function createSession(email) {
 async function getUserFromRequest(req) {
   const token = parseCookies(req).session;
   if (!token) return null;
-  const { data: session, error } = await supabase.from("sessions").select("*").eq("token", token).maybeSingle();
+  const { data: session, error } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("token", hashSessionToken(token))
+    .maybeSingle();
   if (error || !session) return null;
   if (new Date(session.expires_at) < new Date()) return null;
-  const { data: user } = await supabase.from("users").select("email,username,avatar").eq("email", session.email).eq("verified", true).maybeSingle();
-  return user || null;
+  // is_premium is selected (and defaulted to false for older rows) so every
+  // downstream consumer sees a boolean instead of undefined.
+  const { data: user } = await supabase
+    .from("users")
+    .select("email,username,avatar,is_premium")
+    .eq("email", session.email)
+    .eq("verified", true)
+    .maybeSingle();
+  if (!user) return null;
+  user.is_premium = user.is_premium === true;
+  return user;
 }
 
 // Username rules: 3-20 chars, letters/numbers/underscores only, must start with a letter.
@@ -510,10 +551,14 @@ async function isUsernameTaken(username, exceptEmail) {
   return Boolean(data && data.length);
 }
 
+// A freshly issued code always resets the failed-attempt counter - otherwise a
+// user who fat-fingered the previous code would be locked out of the new one.
 async function setLoginCode(email) {
   const code = generateCode();
   const { error } = await supabase.from("users").update({
-    code, code_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    code,
+    code_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    code_attempts: 0
   }).eq("email", email);
   throwIfError(error);
   return code;
@@ -543,6 +588,10 @@ async function sendVerificationEmail(email, code, subjectLine) {
 // In-memory is fine for a single-instance deploy; swap for Redis if you scale out.
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const GLOBAL_RATE_LIMIT = 200;
+// How many wrong verification codes a single account may submit before its
+// current code is burned and a new one must be requested.
+const MAX_CODE_ATTEMPTS = 5;
+
 const RATE_LIMITS = {
   "/api/auth/login": 10,
   "/api/auth/signup": 5,
@@ -589,40 +638,18 @@ function incrementBucket(key, limit) {
   return bucket.count > limit;
 }
 
-// Premium-aware route detection.
-// Future Stripe entitlement logic should replace the header / request-based check below.
+// Premium entitlement lives in lib/entitlement.js (unit-tested, single source of
+// truth). The dev header is honoured only when NODE_ENV is not production.
+const PREMIUM_OPTS = { allowDevHeader: isDev };
+
 function isPremiumRequest(req) {
-  if (!req || !req.headers) return false;
-
-  // Backend-aware premium helper path: if the server already attaches premium status
-  // to the request object, prefer that.
-  if (typeof req.isPremium === 'function') return req.isPremium();
-  if (req.user && typeof req.user.isPremium !== 'undefined') return Boolean(req.user.isPremium);
-  if (req.session?.user && typeof req.session.user.isPremium !== 'undefined') return Boolean(req.session.user.isPremium);
-
-  // Developer-mode passthrough for the current local premium toggle.
-  const premiumHeader = String(req.headers['x-dev-premium'] || req.headers['x-premium'] || '').toLowerCase();
-  return premiumHeader === '1' || premiumHeader === 'true' || premiumHeader === 'yes';
-}
-
-function isAiRateLimitedPath(pathname) {
-  return pathname === '/api/study' || pathname === '/api/learning-resources';
+  return isPremiumRequestPure(req, PREMIUM_OPTS);
 }
 
 function isRateLimited(pathname, req) {
-  if (isPremiumRequest(req) && isAiRateLimitedPath(pathname)) {
-    return false;
-  }
-  // Root-cause fix (Bug #1 / HTTP 429): this function body was an unfinished stub -
-  // everything after the premium bypass had been replaced with a placeholder comment,
-  // so it fell through and returned `undefined` (falsy) for every non-premium request.
-  // RATE_LIMITS, incrementBucket(), and GLOBAL_RATE_LIMIT were all defined above but
-  // never actually invoked anywhere in the file - the per-IP throttle was dead code
-  // that could never fire predictably. Completing the implementation here restores
-  // real, bounded per-IP/per-endpoint throttling instead of an all-or-nothing stub.
   const ip = getClientIp(req);
   const key = ip + ":" + pathname;
-  const limit = RATE_LIMITS[pathname] || GLOBAL_RATE_LIMIT;
+  const limit = rateLimitFor(pathname, req, RATE_LIMITS, GLOBAL_RATE_LIMIT, PREMIUM_OPTS);
   return incrementBucket(key, limit);
 }
 
@@ -634,12 +661,6 @@ setInterval(() => {
   }
 }, RATE_LIMIT_WINDOW_MS);
 
-function safeCompareCode(storedCode, submittedCode) {
-  const a = Buffer.from(String(storedCode || "").padEnd(6, "0"));
-  const b = Buffer.from(String(submittedCode || "").padEnd(6, "0"));
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
 
 async function handleAuth(url, req, res) {
   if (url.pathname === "/api/auth/me" && req.method === "GET") {
@@ -711,11 +732,36 @@ async function handleAuth(url, req, res) {
   if (url.pathname === "/api/auth/verify") {
     if (!email) return sendJson(res, 400, { error: "Email required." });
     const code = String(body.code || "").trim();
-    const { data: user } = await supabase.from("users").select("code,code_expires_at,username").eq("email", email).maybeSingle();
-    if (!user || !user.code || !safeCompareCode(user.code, code)) return sendJson(res, 400, { error: "Invalid code. Check your email and try again." });
-    if (user.code_expires_at && new Date(user.code_expires_at) < new Date()) return sendJson(res, 400, { error: "Code expired. Request a new one." });
+    const { data: user } = await supabase
+      .from("users")
+      .select("code,code_expires_at,username,code_attempts")
+      .eq("email", email)
+      .maybeSingle();
+    if (!user || !user.code) return sendJson(res, 400, { error: "Invalid code. Check your email and try again." });
 
-    const { error: verifyErr } = await supabase.from("users").update({ verified: true, code: null, code_expires_at: null }).eq("email", email);
+    // Expansion check must happen before the comparison, otherwise a correct
+    // guess would still be accepted on an expired code.
+    if (user.code_expires_at && new Date(user.code_expires_at) < new Date()) {
+      return sendJson(res, 400, { error: "Code expired. Request a new one." });
+    }
+
+    // A 6-digit code is only 1,000,000 possibilities; without a per-account
+    // counter, the per-IP rate limit alone leaves it brute-forceable by an
+    // attacker rotating IPs. Burn the code after MAX_CODE_ATTEMPTS failures.
+    const attempts = Number(user.code_attempts || 0);
+    if (attempts >= MAX_CODE_ATTEMPTS) {
+      return sendJson(res, 429, { error: "Too many incorrect codes. Request a new one." });
+    }
+
+    if (!safeCompareCode(user.code, code)) {
+      await supabase.from("users").update({ code_attempts: attempts + 1 }).eq("email", email);
+      return sendJson(res, 400, { error: "Invalid code. Check your email and try again." });
+    }
+
+    const { error: verifyErr } = await supabase
+      .from("users")
+      .update({ verified: true, code: null, code_expires_at: null, code_attempts: 0 })
+      .eq("email", email);
     throwIfError(verifyErr);
 
     // A username is mandatory. If this account doesn't have one yet, don't log
@@ -799,7 +845,7 @@ async function handleAuth(url, req, res) {
 
   if (url.pathname === "/api/auth/logout") {
     const token = parseCookies(req).session;
-    if (token) await supabase.from("sessions").delete().eq("token", token);
+    if (token) await supabase.from("sessions").delete().eq("token", hashSessionToken(token));
     res.setHeader("Set-Cookie", clearSessionCookie(req));
     return sendJson(res, 200, { success: true });
   }
@@ -867,7 +913,15 @@ async function main() {
   setInterval(cleanupExpired, CLEANUP_INTERVAL_MS);
 
   const server = createServer(async (req, res) => {
-    const url = new URL(req.url || "/", "http://127.0.0.1:" + port);
+    // req.url is in origin-form ("/path?query"), so it must NOT be resolved
+    // against a base: `new URL("//server.js", base)` reads "//server.js" as a
+    // protocol-relative URL with host "server.js" and pathname "/", which silently
+    // collapses every leading-double-slash request onto the app shell.
+    const rawTarget = req.url || "/";
+    const queryAt = rawTarget.indexOf("?");
+    const rawPath = queryAt === -1 ? rawTarget : rawTarget.slice(0, queryAt);
+    const rawQuery = queryAt === -1 ? "" : rawTarget.slice(queryAt);
+    const url = new URL("http://localhost" + (rawPath.startsWith("/") ? rawPath : "/" + rawPath) + rawQuery);
 
     const origin = String(req.headers.origin || "").trim();
     res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
@@ -925,10 +979,15 @@ async function main() {
 
       if (url.pathname === "/api/study" && req.method === "POST") return await handleStudy(req, res, user.email);
  
-      // Premium-only client feature (Loop Engineering's "AI Learning Resources"). Gating on
-      // premium happens client-side (see DeveloperSettings.isPremium()); this endpoint itself
-      // just requires a logged-in user, same as every other /api route below.
-      if (url.pathname === "/api/learning-resources" && req.method === "POST") return await handleLearningResources(req, res);
+      // Premium-only feature ("AI Learning Resources"). This is enforced on the
+      // SERVER: it previously relied on the client hiding the button, which meant
+      // a free account could call the endpoint directly with curl.
+      if (url.pathname === "/api/learning-resources" && req.method === "POST") {
+        if (!isPremiumRequest(req)) {
+          return sendJson(res, 403, { error: "AI Learning Resources is a Premium feature.", upgradeRequired: true });
+        }
+        return await handleLearningResources(req, res);
+      }
 
       // --- CHAT SESSION (thread) API ENDPOINTS ---
       if (url.pathname === "/api/sessions" && req.method === "GET") {
@@ -977,31 +1036,8 @@ async function main() {
         const card = await getFlashcard(String(id).trim(), user.email);
         if (!card) return sendJson(res, 404, { error: "Card not found" });
 
-        let q = typeof quality === 'boolean' ? (quality ? 5 : 1) : Number(quality);
-        if (isNaN(q)) q = 3;
-
-        // SM-2 Algorithm Logic
-        if (q < 3) {
-          card.repetitions = 0; // Reset progress if struggled
-          card.incorrectCount = (card.incorrectCount || 0) + 1;
-          card.interval = 1;
-        } else {
-          card.correctCount = (card.correctCount || 0) + 1;
-          if (card.repetitions === 0) card.interval = 1;
-          else if (card.repetitions === 1) card.interval = 6;
-          else card.interval = Math.round((card.interval || 1) * card.ef);
-          card.repetitions++;
-        }
-
-        // Adjust Easiness Factor (EF)
-        card.ef = (card.ef || 2.5) + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-        if (card.ef < 1.3) card.ef = 1.3;
-
-        const nextDate = new Date();
-        nextDate.setDate(nextDate.getDate() + (card.interval || 1));
-        card.nextReview = nextDate.toISOString();
-        card.lastReviewed = new Date().toISOString();
-
+        // SM-2 step is a pure function (lib/scheduling.js) so it can be tested.
+        Object.assign(card, reviewFlashcard(card, quality));
         const saved = await saveFlashcard(card);
         return sendJson(res, 200, { flashcard: saved });
       }
@@ -1017,62 +1053,83 @@ async function main() {
         const subject = String(body.subject || "General").trim().slice(0, 50) || "General";
         const topic = String(body.topic || "Study Session").trim().slice(0, 100) || "Study Session";
 
-        const progressData = await getProgress(user.email);
-        if (!progressData.subjects[subject]) {
-          progressData.subjects[subject] = { topicsCovered: [], studyDays: [], xp: 0 };
-        }
+        // Streak/XP rules are a pure function (lib/scheduling.js).
+        const current = await getProgress(user.email);
+        const { progress, xpAwarded } = applyStudyProgress(current, { subject, topic });
 
-        const subjData = progressData.subjects[subject];
-        const today = new Date().toISOString().split('T')[0];
-        const wasNewDayOverall = progressData.lastStudyDate !== today;
+        await saveProgress(user.email, progress);
+        return sendJson(res, 200, { success: true, progress, xpAwarded });
+      }
 
-        // Track topics covered
-        if (topic && !subjData.topicsCovered.includes(topic)) {
-          subjData.topicsCovered.push(topic);
-        }
+      if (url.pathname === "/api/quiz/start" && req.method === "POST") {
+        const body = await parseJson(req);
+        const subject = String(body.subject || "General").trim().slice(0, 50) || "General";
+        const notes = String(body.notes || "").trim().slice(0, 500);
+        const topic = notes ? "the student's notes: " + notes : "the subject " + subject;
 
-        // Track study days & award per-subject XP
-        if (!subjData.studyDays.includes(today)) {
-          subjData.studyDays.push(today);
-          subjData.xp = (subjData.xp || 0) + 10;
-        }
+        const sysp = "You write multiple-choice quiz questions for a study app. " +
+          "Respond with ONLY valid JSON - no markdown, no code fences, no headers like \"Question 1\", no commentary before or after. " +
+          "Your entire response must start with the character \"[\" and end with the character \"]\". " +
+          "Format exactly: [{\"question\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"correctIndex\": 0-based index of the correct option, \"explanation\": \"very brief explanation, 12 words max\"}]. " +
+          "Each question needs exactly 4 options in a random, unpredictable order. Keep every field concise.";
+        const prompt = "Create a 5-question multiple-choice quiz about " + topic + ". Subject: " + subject + ". " +
+          "CRITICAL: You must generate completely unique, creative, and random questions. Do not use the same questions every time. " +
+          "Random seed: " + Date.now() + "-" + Math.floor(Math.random() * 100000);
 
-        // Update global streak
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const questions = await generateQuizQuestions(prompt, sysp);
+        if (!questions.length) return sendJson(res, 502, { error: "Could not generate a quiz. Please try again." });
 
-        if (progressData.lastStudyDate === today) {
-          // Already studied today
-        } else if (progressData.lastStudyDate === yesterdayStr) {
-          progressData.globalStreak += 1;
-        } else {
-          progressData.globalStreak = 1;
-        }
-        progressData.lastStudyDate = today;
+        const attemptId = generateId();
+        const { error: insertErr } = await supabase.from("quiz_attempts").insert({
+          id: attemptId,
+          user_email: user.email,
+          subject,
+          questions
+        });
+        throwIfError(insertErr);
 
-        // Award global leaderboard XP once per day: a base amount for showing up,
-        // plus a bonus that scales with (and rewards maintaining) the streak.
-        let xpAwarded = 0;
-        if (wasNewDayOverall) {
-          const streakBonus = Math.min(progressData.globalStreak, 10) * 2; // caps at +20
-          xpAwarded = 10 + streakBonus;
-          progressData.totalXp = (progressData.totalXp || 0) + xpAwarded;
-        }
-
-        await saveProgress(user.email, progressData);
-        return sendJson(res, 200, { success: true, progress: progressData, xpAwarded });
+        // The answer key never leaves the server on this path.
+        return sendJson(res, 201, {
+          attemptId,
+          subject,
+          questions: questions.map(q => ({ question: q.question, options: q.options }))
+        });
       }
 
       if (url.pathname === "/api/quiz/complete" && req.method === "POST") {
         const body = await parseJson(req);
-        const subject = String(body.subject || "General").trim().slice(0, 50) || "General";
-        const correct = Math.max(0, Number(body.correct) || 0);
-        const total = Math.max(0, Number(body.total) || 0);
+        const attemptId = String(body.attemptId || "").trim();
+        if (!/^[a-z0-9]+$/i.test(attemptId)) return sendJson(res, 400, { error: "attemptId required." });
 
-        // XP for quiz performance: points per correct answer, plus a perfect-score bonus.
-        const perfectBonus = (total > 0 && correct === total) ? 25 : 0;
-        const xpAwarded = correct * 5 + perfectBonus;
+        const answers = Array.isArray(body.answers) ? body.answers : [];
+
+        const { data: attempt, error: attemptErr } = await supabase
+          .from("quiz_attempts")
+          .select("id,user_email,subject,questions,consumed_at")
+          .eq("id", attemptId)
+          .eq("user_email", user.email)
+          .maybeSingle();
+        throwIfError(attemptErr);
+        if (!attempt) return sendJson(res, 404, { error: "Quiz not found. Start a new one." });
+        if (attempt.consumed_at) return sendJson(res, 409, { error: "This quiz was already graded." });
+
+        const questions = Array.isArray(attempt.questions) ? attempt.questions : [];
+        // Grade against the stored key (lib/text.gradeQuiz). A missing or
+        // out-of-range answer counts as wrong.
+        const { correct, total } = gradeQuiz(questions, answers);
+
+        // XP rule lives in lib/scheduling.js so the client display and the
+        // persisted total can never drift apart.
+        const xpAwarded = quizXp(correct, total);
+        const subject = attempt.subject || "General";
+
+        // Mark consumed BEFORE awarding XP so a replayed request can't double-award.
+        const { error: consumeErr } = await supabase
+          .from("quiz_attempts")
+          .update({ consumed_at: new Date().toISOString(), score: correct, total })
+          .eq("id", attemptId)
+          .is("consumed_at", null);
+        throwIfError(consumeErr);
 
         const progressData = await getProgress(user.email);
         if (!progressData.subjects[subject]) {
@@ -1082,7 +1139,15 @@ async function main() {
         progressData.totalXp = (progressData.totalXp || 0) + xpAwarded;
 
         await saveProgress(user.email, progressData);
-        return sendJson(res, 200, { success: true, xpAwarded, totalXp: progressData.totalXp, progress: progressData });
+        // The answer key is safe to reveal now that the attempt is spent.
+        return sendJson(res, 200, {
+          success: true,
+          xpAwarded,
+          totalXp: progressData.totalXp,
+          progress: progressData,
+          score: { correct, total },
+          review: questions.map(q => ({ correctIndex: q.correctIndex, explanation: q.explanation || "" }))
+        });
       }
 
       if (url.pathname === "/api/leaderboard" && req.method === "GET") {
@@ -1094,7 +1159,11 @@ async function main() {
       // -----------------------------
       if (url.pathname === "/favicon.ico") { res.writeHead(204); res.end(); return; }
 
-      if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html" || !path.extname(url.pathname))) {
+      // Only the app's real entry points serve HTML. This used to be
+      // `|| !path.extname(url.pathname)`, which meant any extensionless path -
+      // including "//server.js" - was answered with index.html instead of 404.
+      const APP_HTML_ROUTES = new Set(["/", "/index.html", "/study-app.html", "/app.html", "/main.html"]);
+      if ((req.method === "GET" || req.method === "HEAD") && APP_HTML_ROUTES.has(url.pathname)) {
         // Not logged in -> serve the login page instead of the app
         if (!user) {
           const loginFile = join(root, "login.html");
@@ -1113,7 +1182,8 @@ async function main() {
           res.end("ERROR: No HTML file found in: " + root);
           return;
         }
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+        if (req.method === "HEAD") { res.end(); return; }
         createReadStream(indexFile).pipe(res);
         return;
       }
@@ -1124,7 +1194,7 @@ async function main() {
         res.end();
         return;
       }
-      serveStatic(url.pathname, res);
+      serveStatic(url.pathname, req, res);
     } catch (e) {
       console.error("[Server] Unhandled error:", e);
       return sendJson(res, 500, { error: "Internal server error." });
@@ -1143,11 +1213,11 @@ async function main() {
   server.timeout = 120000;
   server.keepAliveTimeout = 125000;
   server.headersTimeout = 125000;
-  server.listen(port, "127.0.0.1", () => {
+  server.listen(port, host, () => {
     console.log("===========================================");
     console.log("   W.E.D.N.E.S.D.A.Y  STUDY  APP   ");
     console.log("===========================================");
-    console.log("  URL:    http://127.0.0.1:" + port);
+    console.log("  URL:    http://" + (host === "0.0.0.0" ? "localhost" : host) + ":" + port);
     console.log("  AI:       " + (apiKey ? "Configured [OK]" : "MISSING [ERROR]"));
     console.log("  Supabase: " + (() => {
       try { return new URL(supabaseUrl).host; } catch { return "configured"; }
@@ -1632,27 +1702,9 @@ function truncateTitle(text) {
 // AI LEARNING RESOURCES (YouTube) - premium client feature
 // ============================================
 // Converts an ISO 8601 duration (e.g. "PT14M32S") into "14:32" / "1:02:03".
-function formatIsoDuration(iso) {
-  const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(String(iso || ""));
-  if (!m) return "";
-  const h = Number(m[1] || 0), min = Number(m[2] || 0), s = Number(m[3] || 0);
-  const mm = h > 0 ? String(min).padStart(2, "0") : String(min);
-  const ss = String(s).padStart(2, "0");
-  return h > 0 ? (h + ":" + mm + ":" + ss) : (mm + ":" + ss);
-}
 
 // Simple relevance+popularity ranking: earlier search results are already relevance-sorted
 // by YouTube, so blend that rank with (log-scaled) view count rather than trusting either alone.
-function rankVideos(videos) {
-  const maxViews = Math.max(1, ...videos.map(v => v.viewCount || 0));
-  return videos
-    .map((v, i) => {
-      const relevance = 1 - i / videos.length; // 1.0 (first result) -> ~0 (last)
-      const popularity = Math.log10((v.viewCount || 0) + 1) / Math.log10(maxViews + 1);
-      return { ...v, score: relevance * 0.6 + popularity * 0.4 };
-    })
-    .sort((a, b) => b.score - a.score);
-}
 
 async function generateRecommendationReason(topic, video) {
   if (!apiKey) return "Closely matches the topic and has strong watch metrics among the search results.";
@@ -1860,6 +1912,51 @@ function getModelChain() {
   return ACTIVE_MODELS;
 }
 
+// ============================================
+// QUIZ GENERATION (server-owned answer key)
+// ============================================
+// Extraction/normalization live in lib/text.js (unit-tested there).
+// One bounded provider call (first working model in the chain), mirroring the
+// timeout/fallback behavior of generateRecommendationReason.
+async function generateQuizQuestions(prompt, sysp) {
+  const modelChain = getModelChain();
+  const reqMaxTokens = 3000;
+  for (const model of modelChain) {
+    const controller = new AbortController();
+    const timeoutMs = computeRequestTimeoutMs(reqMaxTokens);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const startedAt = Date.now();
+    try {
+      const r = await fetch(baseUrl + "/chat/completions", {
+        method: "POST",
+        headers: { "authorization": "Bearer " + apiKey, "content-type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "system", content: sysp }, { role: "user", content: prompt }],
+          temperature: 0.9,
+          max_tokens: reqMaxTokens
+        }),
+        signal: controller.signal
+      });
+      const data = await r.json().catch(() => ({}));
+      const content = data?.choices?.[0]?.message?.content;
+      if (r.ok && content) {
+        const questions = normalizeQuizQuestions(extractJsonArrayPure(content));
+        console.log("[Quiz] Generated:", JSON.stringify({ model, count: questions.length, elapsedMs: Date.now() - startedAt, status: r.status }));
+        if (questions.length) return questions;
+      } else {
+        console.log("[Quiz] Model failed:", model, "- HTTP", r.status);
+      }
+    } catch (e) {
+      const reason = e.name === "AbortError" ? "timed out after " + (Date.now() - startedAt) + "ms" : e.message;
+      console.log("[Quiz] Model failed:", model, "-", reason);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+  return [];
+}
+
 function hasUsableChatCompletionPayload(respData) {
   if (!respData || typeof respData !== "object" || Array.isArray(respData)) return false;
   if (Object.keys(respData).length === 0) return false;
@@ -1898,7 +1995,11 @@ const ALLOWED_STATIC_EXTENSIONS = new Set([".html", ".css", ".js", ".ico", ".png
 // (e.g. server.js has a .js extension but must not be downloadable).
 const BLOCKED_STATIC_NAMES = new Set(["server.js", "package.json", "package-lock.json", "supabase_schema.sql"]);
 
-function serveStatic(pathname, res) {
+// Paths under these prefixes are served from the `static/` directory. This keeps
+// css/js/svg out of the project root, where they would sit next to server.js.
+const STATIC_MOUNTS = ["/css/", "/js/", "/img/"];
+
+function serveStatic(pathname, req, res) {
   let decoded;
   try {
     decoded = decodeURIComponent(pathname);
@@ -1915,25 +2016,38 @@ function serveStatic(pathname, res) {
     res.writeHead(404); res.end("Not found"); return;
   }
 
-  const target = resolve(join(root, decoded));
+  const isMounted = STATIC_MOUNTS.some(prefix => decoded.startsWith(prefix));
+  const target = resolve(join(root, isMounted ? "static" + decoded : decoded));
   // Must resolve to root itself or a genuine child of root - startsWith(root) alone
   // can be bypassed by a sibling directory that merely shares the prefix.
   if (target !== root && !target.startsWith(root + path.sep)) {
     res.writeHead(403); res.end("Forbidden"); return;
   }
 
+  // Server-side code must never be downloadable. Root-level .js is only reachable
+  // for files intentionally placed there; everything under static/ is public.
   const ext = extname(target).toLowerCase();
   const base = path.basename(target).toLowerCase();
   if (!ALLOWED_STATIC_EXTENSIONS.has(ext) || BLOCKED_STATIC_NAMES.has(base)) {
     res.writeHead(404); res.end("Not found"); return;
   }
-
-  if (!existsSync(target) || statSync(target).isDirectory()) { res.writeHead(404); res.end("Not found"); return; }
-  if (!ALLOWED_STATIC_EXTENSIONS.has(ext) || BLOCKED_STATIC_NAMES.has(base)) {
+  if (!isMounted && [".js", ".mjs", ".cjs"].includes(ext) && target.startsWith(root + path.sep) && !target.startsWith(join(root, "static") + path.sep)) {
     res.writeHead(404); res.end("Not found"); return;
   }
 
-  res.writeHead(200, { "content-type": mime[ext] || "application/octet-stream", "cache-control": "public, max-age=0, no-cache" });
+  if (!existsSync(target) || statSync(target).isDirectory()) { res.writeHead(404); res.end("Not found"); return; }
+
+  // Assets under static/ are versioned by the app's HTML and change rarely, so they
+  // get a real cache lifetime (this was `max-age=0, no-cache`, forcing a revalidation
+  // round-trip for every css/js request). HTML is still never cached.
+  const immutable = isMounted;
+  res.writeHead(200, {
+    "content-type": mime[ext] || "application/octet-stream",
+    "cache-control": immutable
+      ? "public, max-age=3600, must-revalidate"
+      : "public, max-age=0, no-cache"
+  });
+  if (req.method === "HEAD") { res.end(); return; }
   createReadStream(target).pipe(res);
 }
 
@@ -1980,27 +2094,30 @@ async function parseJson(req) {
 
 function sendJson(res, status, data) { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(data)); }
 function stripSlash(v) { return v.replace(/\/$/, ""); }
-function cleanReply(value, escapeForHtml = true) {
-  const sanitized = String(value)
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/<tool_call[\s\S]*?<\/tool_call>/gi, "")
-    .replace(/<\/?(?:tool_call|arg_key|arg_value)[^>]*>/gi, "")
-    .replace(/`{1,3}\s*tool_code[\s\S]*?`{1,3}/gi, "")
-    .trim();
-  // HTML-escaping is only appropriate for replies that will later be inserted as
-  // markup in the chat UI. noSave callers (e.g. the quiz generator) consume the raw
-  // reply programmatically - JSON.parse-ing it - so escaping quotes/brackets to
-  // &quot;/&amp;/etc. here would corrupt the JSON before the client ever sees it.
-  if (!escapeForHtml) return sanitized;
-  return sanitized
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 function findIndexFile() {
   for (const name of ["study-app.html", "index.html", "app.html", "main.html"]) {
     const p = join(root, name); if (existsSync(p) && statSync(p).isFile()) return p;
   } return null;
+}
+
+// ============================================
+// PROCESS-LEVEL SAFETY NET
+// ============================================
+// The request handler catches its own errors, but background promises
+// (cleanup timers, fire-and-forget DB writes, stream teardown) run outside it.
+// A single unhandled rejection used to take the process down for every connected
+// user. Log loudly, keep serving; the in-flight request is already lost.
+process.on("unhandledRejection", (reason) => {
+  console.error("[Process] Unhandled promise rejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[Process] Uncaught exception:", err);
+  // A corrupted event loop is worse than a restart, but exiting here would drop
+  // every live session. Defer the decision to the supervisor's health check.
+});
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    console.log("[Process] " + signal + " received - shutting down.");
+    process.exit(0);
+  });
 }

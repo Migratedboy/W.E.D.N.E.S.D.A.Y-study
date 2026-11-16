@@ -1,2 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets — never commit these.
+# Copy .env.example to .env and fill it in.
+.env
+.env.*
+!.env.example
+
+# IDE
 .ideavo/project
+
+# Logs
 *.log
+npm-debug.log*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Test / build output
+coverage/
+dist/
+*.tsbuildinfo
